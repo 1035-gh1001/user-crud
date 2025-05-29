@@ -30,4 +30,20 @@ const protect = (req, res, next) => {
     }
 };
 
-module.exports = { protect };
+const checkRole = (requiredRoles) => {
+    return (req, res, next) => {
+        // Ensure req.user is populated by the 'protect' middleware running before this.
+        if (!req.user || !req.user.roles) {
+            return res.status(403).json({ msg: 'Forbidden: User roles not available.' });
+        }
+
+        const hasRequiredRole = req.user.roles.some(role => requiredRoles.includes(role));
+
+        if (!hasRequiredRole) {
+            return res.status(403).json({ msg: 'Forbidden: You do not have the required role for this action.' });
+        }
+        next(); // User has at least one of the required roles
+    };
+};
+
+module.exports = { protect, checkRole }; // Update exports

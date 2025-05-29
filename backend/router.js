@@ -1,7 +1,7 @@
 const express = require('express');
 const { body } = require('express-validator'); // Import body from express-validator
 const controller = require('./controller');
-const { protect } = require('../middleware/authMiddleware'); // Import protect middleware
+const { protect, checkRole } = require('./middleware/authMiddleware'); // Corrected path and added checkRole
 
 const router = express.Router();
 
@@ -37,5 +37,23 @@ router.post('/auth/refresh-token', controller.refreshToken); // Will be /api/aut
 
 // Add new logout route
 router.post('/auth/logout', controller.logoutUser); // Will be /api/auth/logout
+
+// Route for requesting a password reset
+router.post(
+    '/auth/request-password-reset',
+    [
+        body('email', 'Please provide a valid email').isEmail()
+    ],
+    controller.requestPasswordReset
+);
+
+// Route for resetting the password
+router.post(
+    '/auth/reset-password/:resetToken', // Token as URL parameter
+    [
+        body('password', 'Password must be 6 or more characters').isLength({ min: 6 })
+    ],
+    controller.resetPassword
+);
 
 module.exports = router;

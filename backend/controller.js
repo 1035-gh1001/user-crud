@@ -2,10 +2,11 @@
 const JWT_SECRET = 'your_jwt_secret_key_for_access_token';
 const JWT_REFRESH_SECRET = 'your_jwt_refresh_secret_key_for_refresh_token';
 
+const crypto = require('crypto'); // Added crypto
 const User = require('./model');
 const bcrypt = require('bcryptjs'); 
 const { validationResult } = require('express-validator');
-const jwt = require('jsonwebtoken'); // Added jsonwebtoken
+const jwt = require('jsonwebtoken'); 
 
 const getUsers = (req, res, next) => {
     User.find()
@@ -238,3 +239,101 @@ const logoutUser = (req, res) => {
     res.status(200).json({ msg: 'User logged out successfully' });
 };
 exports.logoutUser = logoutUser; // Export the new function
+
+// Function to request password reset
+const requestPasswordReset = async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { email } = req.body;
+
+    try {
+        const user = await User.findOne({ email });
+        if (!user) {
+            // Important: Do not reveal if an email address is registered or not.
+            // Send a generic success message to prevent user enumeration.
+            return res.status(200).json({ msg: 'If your email is registered, you will receive a password reset link.' });
+        }
+
+        // Generate a reset token (plain token for email, hashed for DB)
+        const resetToken = crypto.randomBytes(32).toString('hex');
+        
+        // Hash the token before saving to DB
+        // Need to select the fields to be able to save them, as they are select: false in schema
+        const userWithPasswordFields = await User.findOne({ email }).select('+passwordResetToken +passwordResetExpires');
+        if (!userWithPasswordFields) {
+             // Should not happen if user was found above, but as a safeguard
+            return res.status(404).json({ msg: 'User not found after attempting to select password fields.'});
+        }
+
+        userWithPasswordFields.passwordResetToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+        // Set expiration (e.g., 1 hour from now)
+        userWithPasswordFields.passwordResetExpires = Date.now() + 3600000; // 1 hour in milliseconds
+
+        await userWithPasswordFields.save();
+
+        // Simulate sending email (in a real app, use an email library like nodemailer)
+        console.log('Password Reset Email Simulation:');
+        console.log(`To: ${userWithPasswordFields.email}`);
+        console.log(`Subject: Password Reset Request`);
+        // IMPORTANT: The link should point to your FRONTEND URL that handles password reset.
+        // The frontend will then make an API call to the /reset-password endpoint with this token.
+        console.log(`Reset Link: http://<your-frontend-url>/reset-password/${resetToken}`);
+        console.log('--- End of Email Simulation ---');
+        
+        // Again, send a generic success message
+        res.status(200).json({ msg: 'If your email is registered, you will receive a password reset link.' });
+
+    } catch (err) {
+        console.error('Error in requestPasswordReset:', err.message);
+        // Generic error to client, specific log on server
+        res.status(500).send('Server error');
+    }
+};
+exports.requestPasswordReset = requestPasswordReset; // Export the new function
+
+// Function to reset password
+const resetPassword = async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { password } = req.body;
+    const { resetToken } = req.params; // Get token from URL parameter
+
+    try {
+        // Hash the token from the URL to match the one stored in DB
+        const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+
+        // Find user by the hashed token and check if token has not expired
+        const user = await User.findOne({
+            passwordResetToken: hashedToken,
+            passwordResetExpires: { $gt: Date.now() } // Check if current time is less than expiry time
+        }).select('+passwordResetToken +passwordResetExpires'); // Explicitly select these fields
+
+        if (!user) {
+            return res.status(400).json({ errors: [{ msg: 'Password reset token is invalid or has expired.' }] });
+        }
+
+        // Hash the new password
+        const salt = await bcrypt.genSalt(10);
+        user.password = await bcrypt.hash(password, salt);
+
+        // Clear the reset token fields
+        user.passwordResetToken = undefined;
+        user.passwordResetExpires = undefined;
+        // Note: Mongoose knows 'undefined' means to $unset the field.
+
+        await user.save();
+
+        res.status(200).json({ msg: 'Password has been reset successfully.' });
+
+    } catch (err) {
+        console.error('Error in resetPassword:', err.message);
+        res.status(500).send('Server error');
+    }
+};
+exports.resetPassword = resetPassword; // Export the new function

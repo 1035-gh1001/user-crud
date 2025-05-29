@@ -1,15 +1,18 @@
 require('dotenv').config();
 
-const express = require('express');
-const cors = require('cors');
 const mongoose = require('mongoose');
+const app = require('./app'); // Import the app from app.js
 
-const router = require('./router');
+// Note: cors and express.json are already configured in app.js
+// No need for:
+// const express = require('express');
+// const cors = require('cors');
+// const router = require('./router'); (app.js already uses the router)
+// const app = express(); (app is imported)
+// app.use(cors());
+// app.use(express.json());
+// app.use('/api', router); (already in app.js)
 
-const app = express();
-
-app.use(cors());
-app.use(express.json());
 
 const {
     HOST: host,

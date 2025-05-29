@@ -20,6 +20,15 @@ const userSchema = new Schema({
     roles: {
         type: [String],
         default: ['user']
+    },
+    // New fields for password reset
+    passwordResetToken: {
+        type: String,
+        select: false 
+    },
+    passwordResetExpires: {
+        type: Date,
+        select: false 
     }
 }, { timestamps: true }); // Added timestamps for createdAt and updatedAt
 
